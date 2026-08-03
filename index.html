@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Smash Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #fdf2f8;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: none; 
+        }
+
+        h1 {
+            color: #9d174d;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            user-select: none;
+        }
+
+        .top-bar {
+            display: flex;
+            gap: 40px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #be185d;
+            margin-bottom: 15px;
+            user-select: none;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            width: 95vw;
+            height: 75vh;
+        }
+
+        .game-container {
+            position: relative;
+            flex: 3;
+            height: 100%;
+            border: 4px dashed #fbcfe8;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .leaderboard-container {
+            flex: 1;
+            height: 100%;
+            background-color: #fff1f2;
+            border: 4px solid #fecdd3;
+            border-radius: 12px;
+            padding: 15px;
+            box-sizing: border-box;
+            cursor: default;
+        }
+
+        .leaderboard-container h2 {
+            margin-top: 0;
+            color: #9f1239;
+            text-align: center;
+            font-size: 20px;
+        }
+
+        .leaderboard-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-bottom: 1px solid #ffe4e6;
+            color: #4c0519;
+            font-weight: bold;
+        }
+
+        .custom-cursor {
+            width: 80px;
+            height: 80px;
+            position: fixed;
+            pointer-events: none; 
+            z-index: 9999;
+            transform: translate(-50%, -50%) rotate(45deg); 
+            transition: transform 0.05s ease;
+        }
+
+        .custom-cursor.hit {
+            transform: translate(-50%, -50%) rotate(15deg) scale(1.2);
+        }
+
+        .target {
+            position: absolute;
+            width: 120px;   /* Larger targets */
+            height: 120px;  /* Larger targets */
+            cursor: none;
+            user-select: none;
+            transition: transform 1.5s linear, left 1.5s ease-out, top 1.5s ease-out;
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Smash Game</h1>
+    
+    <div class="top-bar">
+        <div>Score: <span id="score">0</span></div>
+        <div>Time Left: <span id="timer">30</span>s</div>
+    </div>
+
+    <div class="main-layout">
+        <div class="game-container" id="gameContainer"></div>
+        
+        <div class="leaderboard-container">
+            <h2>🏆 Top Scores</h2>
+            <ul class="leaderboard-list" id="leaderboardList">
+                <li class="leaderboard-item">Loading scores...</li>
+            </ul>
+        </div>
+    </div>
+
+    <img src="cursor.png" class="custom-cursor" id="customCursor" alt="Cursor">
+
+    <script>
+        const cursor = document.getElementById('customCursor');
+        const container = document.getElementById('gameContainer');
+        const scoreDisplay = document.getElementById('score');
+        const timerDisplay = document.getElementById('timer');
+        const leaderboardList = document.getElementById('leaderboardList');
+        
+        let score = 0;
+        let timeLeft = 30; 
+        let gameActive = true;
+
+        // Custom database bucket ID unique to your game session
+        const BUCKET_ID = "smash_game_94832"; 
+        const API_URL = `https://kvdb.io{BUCKET_ID}/leaderboard`;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playArcadeSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'hit') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'gameover') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.8);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.8);
+            }
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+
+        document.addEventListener('mousedown', () => {
+            cursor.classList.add('hit');
+        });
+        document.addEventListener('mouseup', () => {
+            cursor.classList.remove('hit');
+        });
+
+        const countdown = setInterval(() => {
+            if (!gameActive) return;
+            timeLeft--;
+            timerDisplay.textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+                clearInterval(countdown);
+                endGame();
+            }
+        }, 1000);
+
+        function spawnTarget() {
+            if (!gameActive) return;
+
+            const target = document.createElement('img');
+            target.src = "target.jpg"; 
+            target.classList.add('target');
+
+            const padding = 120; // Bound calculations set to match larger target sizing
+            const maxX = container.clientWidth - padding;
+            const maxY = container.clientHeight - padding;
+            
+            target.style.left = Math.floor(Math.random() * maxX) + 'px';
+            target.style.top = Math.floor(Math.random() * maxY) + 'px';
+
+            setTimeout(() => {
+                if (!target.parentNode) return;
+                target.style.left = Math.floor(Math.random() * maxX) + 'px';
+                target.style.top = Math.floor(Math.random() * maxY) + 'px';
+                target.style.transform = 'scale(0.1)';
+            }, 50);
+
+            target.addEventListener('mousedown', () => {
+                if (!gameActive) return;
+                score++;
+                scoreDisplay.textContent = score;
+                playArcadeSound('hit'); 
+                target.remove(); 
+                spawnTarget();   
+            });
+
+            container.appendChild(target);
+
+            setTimeout(() => {
+                if (target.parentNode && gameActive) {
+                    target.remove();
+                    spawnTarget();
+                }
+            }, 1500); 
+        }
+
+        function endGame() {
+            gameActive = false;
+            playArcadeSound('gameover'); 
+            container.innerHTML = "<h2 style='text-align:center; margin-top:20vh; color:#9d174d;'>Game Over!</h2>";
+            
+            document.body.style.cursor = 'default';
+            cursor.style.display = 'none';
+
+            setTimeout(async () => {
+                const playerName = prompt(`You scored ${score} points! Enter your name for the leaderboard:`);
+                if (playerName) {
+                    await submitScore(playerName.trim().substring(0, 10), score);
+                }
+                loadLeaderboard();
+            }, 500);
+        }
+
+        async function submitScore(name, score) {
+            try {
+                let currentScores = [];
+                const response = await fetch(API_URL);
+                if (response.ok) {
+                    currentScores = await response.json();
+                }
+                
+                currentScores.push({ name: name, score: score });
+                currentScores.sort((a, b) => b.score - a.score);
+                currentScores = currentScores.slice(0, 5);
+
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(currentScores)
+                });
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    leaderboardList.innerHTML = "<li class='leaderboard-item'>No scores yet!</li>";
+                    return;
+                }
+                const scores = await response.json();
+                
+                leaderboardList.innerHTML = "";
+                scores.forEach((entry, index) => {
+                    const li = document.createElement('li');
+                    li.classList.add('leaderboard-item');
+                    li.innerHTML = `<span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>`;
+                    leaderboardList.appendChild(li);
+                });
+            } catch (error) {
+                leaderboardList.innerHTML = "<li class='leaderboard-item'>Failed to load scores</li>";
+            }
+        }
+
+        loadLeaderboard();
+        spawnTarget();
+    </script>
+</body>
