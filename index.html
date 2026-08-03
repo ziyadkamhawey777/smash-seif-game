@@ -100,29 +100,12 @@
 
         .target {
             position: absolute;
-            width: 120px;   
-            height: 120px;  
+            width: 120px;   /* Larger targets */
+            height: 120px;  /* Larger targets */
             cursor: none;
             user-select: none;
             transition: transform 1.5s linear, left 1.5s ease-out, top 1.5s ease-out;
             transform: scale(1);
-        }
-
-        .restart-btn {
-            display: block;
-            margin: 20px auto 0 auto;
-            padding: 12px 24px;
-            font-size: 18px;
-            font-weight: bold;
-            background-color: #be185d;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .restart-btn:hover {
-            background-color: #9d174d;
         }
     </style>
 </head>
@@ -139,9 +122,9 @@
         <div class="game-container" id="gameContainer"></div>
         
         <div class="leaderboard-container">
-            <h2>🏆 Global Top Scores</h2>
+            <h2>🏆 Top Scores</h2>
             <ul class="leaderboard-list" id="leaderboardList">
-                <li class="leaderboard-item">Loading live scores...</li>
+                <li class="leaderboard-item">Loading scores...</li>
             </ul>
         </div>
     </div>
@@ -158,10 +141,10 @@
         let score = 0;
         let timeLeft = 30; 
         let gameActive = true;
-        let countdown;
 
-        // Custom storage partition name unique to you and your friends
-        const GAME_ID = "ziyad_smash_seif_game_final";
+        // Custom database bucket ID unique to your game session
+        const BUCKET_ID = "smash_game_94832"; 
+        const API_URL = `https://kvdb.io{BUCKET_ID}/leaderboard`;
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -205,34 +188,25 @@
             cursor.classList.remove('hit');
         });
 
-        function startTimer() {
-            clearInterval(countdown);
-            countdown = setInterval(() => {
-                if (!gameActive) return;
-                timeLeft--;
-                timerDisplay.textContent = timeLeft;
+        const countdown = setInterval(() => {
+            if (!gameActive) return;
+            timeLeft--;
+            timerDisplay.textContent = timeLeft;
 
-                if (timeLeft <= 0) {
-                    clearInterval(countdown);
-                    endGame();
-                }
-            }, 1000);
-        }
+            if (timeLeft <= 0) {
+                clearInterval(countdown);
+                endGame();
+            }
+        }, 1000);
 
         function spawnTarget() {
             if (!gameActive) return;
 
             const target = document.createElement('img');
-            
-            if (Math.random() < 0.5) {
-                target.src = "target.png"; 
-            } else {
-                target.src = "target2.png"; 
-            }
-            
+            target.src = "target.jpg"; 
             target.classList.add('target');
 
-            const padding = 120; 
+            const padding = 120; // Bound calculations set to match larger target sizing
             const maxX = container.clientWidth - padding;
             const maxY = container.clientHeight - padding;
             
@@ -268,40 +242,63 @@
         function endGame() {
             gameActive = false;
             playArcadeSound('gameover'); 
-            
-            container.innerHTML = `
-                <div style='text-align:center; margin-top:15vh;'>
-                    <h2 style='color:#9d174d; font-size:32px; margin-bottom:5px;'>Game Over!</h2>
-                    <p style='font-size:20px; color:#4c0519; margin-top:0;'>Final Score: ${score}</p>
-                    <button class="restart-btn" onclick="resetGame()">Play Again</button>
-                </div>
-            `;
+            container.innerHTML = "<h2 style='text-align:center; margin-top:20vh; color:#9d174d;'>Game Over!</h2>";
             
             document.body.style.cursor = 'default';
             cursor.style.display = 'none';
 
-            setTimeout(() => {
-                const playerName = prompt(`You scored ${score} points! Enter your name for the global leaderboard:`);
+            setTimeout(async () => {
+                const playerName = prompt(`You scored ${score} points! Enter your name for the leaderboard:`);
                 if (playerName) {
-                    submitScore(playerName.trim().substring(0, 10), score);
-                } else {
-                    loadLeaderboard();
+                    await submitScore(playerName.trim().substring(0, 10), score);
                 }
+                loadLeaderboard();
             }, 500);
         }
 
-        // ASYNCHRONOUS BACKGROUND HANDLING: Sends information across the web without freezing execution
         async function submitScore(name, score) {
-            let localScores = JSON.parse(localStorage.getItem('smash_scores')) || [];
-            localScores.push({ name: name, score: score });
-            localScores.sort((a, b) => b.score - a.score);
-            localScores = localScores.slice(0, 5);
-            localStorage.setItem('smash_scores', JSON.stringify(localScores));
+            try {
+                let currentScores = [];
+                const response = await fetch(API_URL);
+                if (response.ok) {
+                    currentScores = await response.json();
+                }
+                
+                currentScores.push({ name: name, score: score });
+                currentScores.sort((a, b) => b.score - a.score);
+                currentScores = currentScores.slice(0, 5);
 
-            // Sync update signal to online cluster background routes
-            fetch(`https://api-ninjas.com{GAME_ID}_${name}&hit=true&value=${score}`, {
-                method: 'POST'
-            }).catch(() => {});
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(currentScores)
+                });
+            } catch (error) {
+                console.error(error);
+            }
+        }
 
-            loadLeaderboard();
-}function loadLeaderboard() {let scores = JSON.parse(localStorage.getItem('smash_scores')) || [];// Populate quick startup mock data to prevent visual rendering lagif (scores.length === 0) {scores = [{ name: "Seif", score: 28 },{ name: "Ziyad", score: 21 },{ name: "Guest_1", score: 12 }];localStorage.setItem('smash_scores', JSON.stringify(scores));}leaderboardList.innerHTML = "";scores.forEach((entry, index) => {const li = document.createElement('li');li.classList.add('leaderboard-item');li.innerHTML = <span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>;leaderboardList.appendChild(li);});}window.resetGame = function() {score = 0;timeLeft = 30;gameActive = true;scoreDisplay.textContent = score;timerDisplay.textContent = timeLeft;container.innerHTML = "";document.body.style.cursor = 'none';cursor.style.display = 'block';startTimer();spawnTarget();}// Instantly launch operations synchronously to ignore loading delaysloadLeaderboard();startTimer();spawnTarget();
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    leaderboardList.innerHTML = "<li class='leaderboard-item'>No scores yet!</li>";
+                    return;
+                }
+                const scores = await response.json();
+                
+                leaderboardList.innerHTML = "";
+                scores.forEach((entry, index) => {
+                    const li = document.createElement('li');
+                    li.classList.add('leaderboard-item');
+                    li.innerHTML = `<span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>`;
+                    leaderboardList.appendChild(li);
+                });
+            } catch (error) {
+                leaderboardList.innerHTML = "<li class='leaderboard-item'>Failed to load scores</li>";
+            }
+        }
+
+        loadLeaderboard();
+        spawnTarget();
+    </script>
+</body>
