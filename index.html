@@ -298,4 +298,24 @@
                 });
                 const result = await response.json();
                 const scores = result.record.scores || [];
+leaderboardList.innerHTML = "";
+if (scores.length === 0) {
+leaderboardList.innerHTML = "No global scores yet!";
+return;
+}
+
+scores.forEach((entry, index) => {
+const li = document.createElement('li');
+li.classList.add('leaderboard-item');
+li.innerHTML = <span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>;
+leaderboardList.appendChild(li);
+});
+} catch (error) {
+console.error("Database load failed:", error);
+leaderboardList.innerHTML = "Failed to sync global scores";
+}
+}
+
+loadLeaderboard();
+spawnTarget();
                 
