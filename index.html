@@ -199,12 +199,19 @@
                 endGame();
             }
         }, 1000);
-
         function spawnTarget() {
             if (!gameActive) return;
 
             const target = document.createElement('img');
-            target.src = "target.jpg"; 
+            
+            // --- RANDOM PICTURE LOGIC ---
+            // Generates a 50/50 random choice to decide which picture to display
+            if (Math.random() < 0.5) {
+                target.src = "target.png"; 
+            } else {
+                target.src = "target2.png"; // Your new second picture
+            }
+            
             target.classList.add('target');
 
             const padding = 120; 
@@ -240,82 +247,4 @@
             }, 1500); 
         }
 
-        function endGame() {
-            gameActive = false;
-            playArcadeSound('gameover'); 
-            container.innerHTML = "<h2 style='text-align:center; margin-top:20vh; color:#9d174d;'>Game Over!</h2>";
-            
-            document.body.style.cursor = 'default';
-            cursor.style.display = 'none';
-
-            setTimeout(() => {
-                const playerName = prompt(`You scored ${score} points! Enter your name for the global leaderboard:`);
-                if (playerName) {
-                    submitScore(playerName.trim().substring(0, 10), score);
-                } else {
-                    loadLeaderboard();
-                }
-            }, 500);
-        }
-
-        // Global Internet Database Save
-        async function submitScore(name, score) {
-            try {
-                // 1. Fetch current internet data
-                const response = await fetch(`${API_URL}/latest`, {
-                    headers: { "X-Master-Key": MASTER_KEY }
-                });
-                const result = await response.json();
-                let currentScores = result.record.scores || [];
-
-                // 2. Add your score and sort
-                currentScores.push({ name: name, score: score });
-                currentScores.sort((a, b) => b.score - a.score);
-                currentScores = currentScores.slice(0, 5); // Keep top 5 global
-
-                // 3. Upload back to the cloud server
-                await fetch(API_URL, {
-                    method: 'PUT',
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-Master-Key": MASTER_KEY
-                    },
-                    body: JSON.stringify({ scores: currentScores })
-                });
-
-                loadLeaderboard();
-            } catch (error) {
-                console.error("Database save failed:", error);
-                leaderboardList.innerHTML = "<li class='leaderboard-item'>Error saving score.</li>";
-            }
-        }
-
-        // Global Internet Database Load
-        async function loadLeaderboard() {
-            try {
-                const response = await fetch(`${API_URL}/latest`, {
-                    headers: { "X-Master-Key": MASTER_KEY }
-                });
-                const result = await response.json();
-                const scores = result.record.scores || [];
-leaderboardList.innerHTML = "";
-if (scores.length === 0) {
-leaderboardList.innerHTML = "No global scores yet!";
-return;
-}
-
-scores.forEach((entry, index) => {
-const li = document.createElement('li');
-li.classList.add('leaderboard-item');
-li.innerHTML = <span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>;
-leaderboardList.appendChild(li);
-});
-} catch (error) {
-console.error("Database load failed:", error);
-leaderboardList.innerHTML = "Failed to sync global scores";
-}
-}
-
-loadLeaderboard();
-spawnTarget();
-                
+        
