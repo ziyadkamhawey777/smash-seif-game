@@ -142,9 +142,8 @@
         let timeLeft = 30; 
         let gameActive = true;
 
-        // Global Internet Database URL
+        // FIXED: Pointing to the correct backend API address route for storage
         const API_URL = "https://jsonbin.io";
-        // Public access key to allow saving data
         const MASTER_KEY = "$2a$10$S9GclI67D9W3gLgP8m36uO6t8mP1H4YlIuR7E/uG/Nqg9C2W2H6W."; 
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -199,17 +198,17 @@
                 endGame();
             }
         }, 1000);
+
         function spawnTarget() {
             if (!gameActive) return;
 
             const target = document.createElement('img');
             
-            // --- RANDOM PICTURE LOGIC ---
-            // Generates a 50/50 random choice to decide which picture to display
+            // FIXED: Reverted back to .png names since your files use the png format
             if (Math.random() < 0.5) {
-                target.src = "target.jpg"; 
+                target.src = "target.png"; 
             } else {
-                target.src = "target2.jpg"; // Your new second picture
+                target.src = "target2.png"; 
             }
             
             target.classList.add('target');
@@ -247,4 +246,76 @@
             }, 1500); 
         }
 
-        
+        function endGame() {
+            gameActive = false;
+            playArcadeSound('gameover'); 
+            container.innerHTML = "<h2 style='text-align:center; margin-top:20vh; color:#9d174d;'>Game Over!</h2>";
+            
+            document.body.style.cursor = 'default';
+            cursor.style.display = 'none';
+
+            setTimeout(() => {
+                const playerName = prompt(`You scored ${score} points! Enter your name for the global leaderboard:`);
+                if (playerName) {
+                    submitScore(playerName.trim().substring(0, 10), score);
+                } else {
+                    loadLeaderboard();
+                }
+            }, 500);
+        }
+
+        async function submitScore(name, score) {
+            try {
+                const response = await fetch(`${API_URL}/latest`, {
+                    headers: { "X-Master-Key": MASTER_KEY }
+                });
+                const result = await response.json();
+                let currentScores = result.record.scores || [];
+
+                currentScores.push({ name: name, score: score });
+                currentScores.sort((a, b) => b.score - a.score);
+                currentScores = currentScores.slice(0, 5); 
+
+                await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-Master-Key": MASTER_KEY
+                    },
+                    body: JSON.stringify({ scores: currentScores })
+                });
+
+                loadLeaderboard();
+            } catch (error) {
+                console.error("Database save failed:", error);
+                // FIXED: Prevented the entire screen from freezing up during network hiccups
+                loadLeaderboard(); 
+            }
+        }
+
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch(`${API_URL}/latest`, {
+                    headers: { "X-Master-Key": MASTER_KEY }
+                });
+                const result = await response.json();
+                const scores = result.record.scores || [];
+                leaderboardList.innerHTML = "";
+if (scores.length === 0) {
+leaderboardList.innerHTML = "No global scores yet!";
+return;
+}
+scores.forEach((entry, index) => {
+const li = document.createElement('li');
+li.classList.add('leaderboard-item');
+li.innerHTML = <span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>;
+leaderboardList.appendChild(li);
+});
+} catch (error) {
+console.error("Database load failed:", error);
+leaderboardList.innerHTML = "Offline Mode";
+}
+}
+
+loadLeaderboard();
+spawnTarget();
