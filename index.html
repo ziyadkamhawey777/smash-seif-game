@@ -100,8 +100,8 @@
 
         .target {
             position: absolute;
-            width: 120px;   /* Larger targets */
-            height: 120px;  /* Larger targets */
+            width: 120px;   
+            height: 120px;  
             cursor: none;
             user-select: none;
             transition: transform 1.5s linear, left 1.5s ease-out, top 1.5s ease-out;
@@ -123,9 +123,7 @@
         
         <div class="leaderboard-container">
             <h2>🏆 Top Scores</h2>
-            <ul class="leaderboard-list" id="leaderboardList">
-                <li class="leaderboard-item">Loading scores...</li>
-            </ul>
+            <ul class="leaderboard-list" id="leaderboardList"></ul>
         </div>
     </div>
 
@@ -141,10 +139,6 @@
         let score = 0;
         let timeLeft = 30; 
         let gameActive = true;
-
-        // Custom database bucket ID unique to your game session
-        const BUCKET_ID = "smash_game_94832"; 
-        const API_URL = `https://kvdb.io{BUCKET_ID}/leaderboard`;
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -203,10 +197,10 @@
             if (!gameActive) return;
 
             const target = document.createElement('img');
-            target.src = "target.jpg"; 
+            target.src = "target.png"; 
             target.classList.add('target');
 
-            const padding = 120; // Bound calculations set to match larger target sizing
+            const padding = 120; 
             const maxX = container.clientWidth - padding;
             const maxY = container.clientHeight - padding;
             
@@ -247,58 +241,43 @@
             document.body.style.cursor = 'default';
             cursor.style.display = 'none';
 
-            setTimeout(async () => {
+            setTimeout(() => {
                 const playerName = prompt(`You scored ${score} points! Enter your name for the leaderboard:`);
                 if (playerName) {
-                    await submitScore(playerName.trim().substring(0, 10), score);
+                    submitScore(playerName.trim().substring(0, 10), score);
                 }
                 loadLeaderboard();
             }, 500);
         }
 
-        async function submitScore(name, score) {
-            try {
-                let currentScores = [];
-                const response = await fetch(API_URL);
-                if (response.ok) {
-                    currentScores = await response.json();
-                }
-                
-                currentScores.push({ name: name, score: score });
-                currentScores.sort((a, b) => b.score - a.score);
-                currentScores = currentScores.slice(0, 5);
-
-                await fetch(API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(currentScores)
-                });
-            } catch (error) {
-                console.error(error);
-            }
+        // Local Storage Leaderboard Logic (No Internet Server Required)
+        function submitScore(name, score) {
+            let currentScores = JSON.parse(localStorage.getItem('smash_scores')) || [];
+            currentScores.push({ name: name, score: score });
+            currentScores.sort((a, b) => b.score - a.score);
+            currentScores = currentScores.slice(0, 5); // Keep top 5
+            localStorage.setItem('smash_scores', JSON.stringify(currentScores));
         }
 
-        async function loadLeaderboard() {
-            try {
-                const response = await fetch(API_URL);
-                if (!response.ok) {
-                    leaderboardList.innerHTML = "<li class='leaderboard-item'>No scores yet!</li>";
-                    return;
-                }
-                const scores = await response.json();
-                
-                leaderboardList.innerHTML = "";
-                scores.forEach((entry, index) => {
-                    const li = document.createElement('li');
-                    li.classList.add('leaderboard-item');
-                    li.innerHTML = `<span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>`;
-                    leaderboardList.appendChild(li);
-                });
-            } catch (error) {
-                leaderboardList.innerHTML = "<li class='leaderboard-item'>Failed to load scores</li>";
+        function loadLeaderboard() {
+            let scores = JSON.parse(localStorage.getItem('smash_scores')) || [];
+            leaderboardList.innerHTML = "";
+            
+            if (scores.length === 0) {
+                leaderboardList.innerHTML = "<li class='leaderboard-item'>No scores yet!</li>";
+                return;
             }
+
+            scores.forEach((entry, index) => {
+                const li = document.createElement('li');
+                li.classList.add('leaderboard-item');
+                li.innerHTML = `<span>${index + 1}. ${entry.name}</span> <span>${entry.score}</span>`;
+                leaderboardList.appendChild(li);
+            });
         }
 
         loadLeaderboard();
         spawnTarget();
     </script>
 </body>
+</html>
